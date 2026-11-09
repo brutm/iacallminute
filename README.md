@@ -30,7 +30,7 @@ Captures system audio (+ optional microphone), transcribes live during calls (Te
 
 ### Option 2: Portable Executable
 
-1. Download `IACallMinute.exe` from [Releases](https://github.com/brutm/iacallminute/releases)
+1. Download `IACallMinute_Portable.exe` from [Releases](https://github.com/brutm/iacallminute/releases)
 2. Run directly - no installation required
 3. Configure providers in **Settings** on first launch
 
@@ -146,7 +146,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ### Opzione 2: Eseguibile Portatile
 
-1. Scarica `IACallMinute.exe` da [Releases](https://github.com/brutm/iacallminute/releases)
+1. Scarica `IACallMinute_Portable.exe` da [Releases](https://github.com/brutm/iacallminute/releases)
 2. Esegui direttamente - nessuna installazione richiesta
 3. Configura i provider in **Configurazione** al primo avvio
 
