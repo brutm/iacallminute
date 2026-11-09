@@ -1,0 +1,66 @@
+# === Build artifacts ===
+dist/
+build/
+*.spec
+*.exe
+*.dll
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+
+# === Virtual environments ===
+venv/
+.venv/
+env/
+.env/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Logs and temp ===
+*.log
+logs/
+
+# === Models (large files, download separately) ===
+modelli/
+models/
+
+# === Sensitive data ===
+*.env
+.env*
+!.env.example
+settings.json
+copilot.json
+auth.json
+*credentials*
+*secret*
+*.pem
+*.key
+
+# === OS files ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Test/dev artifacts ===
+.devcode.json
+*.bak
+*.old
+_verify/
+
+# === Cache ===
+.cache/
+*.cache
+.pytest_cache/
+.mypy_cache/
