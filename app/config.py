@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 APP_NAME = "IACallMinute"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 
 TARGET_RATE = 16000  # Hz, mono, int16: formato unico di tutto il pipeline
 

@@ -25,7 +25,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "IACallMinute"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 
 APPDATA_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 
@@ -118,7 +118,22 @@ class InstallerWizard(tk.Tk):
         self._next_btn = ttk.Button(self._nav_frame, text="Next >", command=self._next_step)
         self._next_btn.pack(side="right")
 
+        self._recreate_config = True
+        if _existing_installation():
+            self._recreate_config = messagebox.askyesno(
+                "Existing installation",
+                "An existing installation/configuration was found.\n\n"
+                "Do you want to recreate the configuration?\n\n"
+                "Yes: run the full wizard and answer the configuration questions.\n"
+                "No: keep the existing configuration and install directly.",
+            )
+        if not self._recreate_config:
+            self._current_step = 6
+
         self._show_step()
+
+        if not self._recreate_config:
+            self.after(100, self._run_install)
 
     def _clear_main(self):
         for w in self._main_frame.winfo_children():
@@ -133,7 +148,7 @@ class InstallerWizard(tk.Tk):
 
         builder()
 
-        self._back_btn.config(state="normal" if (0 < self._current_step < len(self._steps) - 1) else "disabled")
+        self._back_btn.config(state="normal" if (0 < self._current_step < 6) else "disabled")
 
         if self._current_step == len(self._steps) - 1:
             self._next_btn.config(text="Finish", state="normal")
@@ -337,16 +352,20 @@ class InstallerWizard(tk.Tk):
         ttk.Label(self._main_frame, text="Installation complete!",
                   style="TLabel").pack(anchor="w", pady=(0, 20))
 
-        summary = f"IACallMinute has been installed to:\n{self._install_dir.get()}\n\n"
+        if self._recreate_config:
+            summary = f"IACallMinute has been installed to:\n{self._install_dir.get()}\n\n"
 
-        if self._stt_choice.get() == "offline":
-            summary += f"Transcription: Whisper {self._whisper_size.get()} (offline)\n"
+            if self._stt_choice.get() == "offline":
+                summary += f"Transcription: Whisper {self._whisper_size.get()} (offline)\n"
+            else:
+                summary += "Transcription: Google Gemini (online)\n"
+
+            provider_names = {"gemini": "Google Gemini", "copilot": "GitHub Copilot",
+                              "groq": "Groq", "openai": "Custom endpoint"}
+            summary += f"Summaries: {provider_names.get(self._text_choice.get(), 'Unknown')}\n"
         else:
-            summary += "Transcription: Google Gemini (online)\n"
-
-        provider_names = {"gemini": "Google Gemini", "copilot": "GitHub Copilot",
-                          "groq": "Groq", "openai": "Custom endpoint"}
-        summary += f"Summaries: {provider_names.get(self._text_choice.get(), 'Unknown')}\n"
+            summary = (f"IACallMinute has been installed to:\n{self._install_dir.get()}\n\n"
+                       "Existing configuration kept unchanged.\n")
 
         ttk.Label(self._main_frame, text=summary, style="TLabel", justify="left").pack(anchor="w")
 
@@ -386,15 +405,18 @@ class InstallerWizard(tk.Tk):
         self._copy_app(install_dir)
         self.after(0, lambda: self._progress_var.set(10))
 
-        if self._stt_choice.get() == "offline" and self._download_now.get():
+        if self._recreate_config and self._stt_choice.get() == "offline" and self._download_now.get():
             self.after(0, lambda: self._status_label.config(text="Downloading Whisper model..."))
             self.after(0, lambda: self._log("Downloading Whisper model (this may take a while)..."))
             self._download_whisper()
             self.after(0, lambda: self._progress_var.set(70))
 
-        self.after(0, lambda: self._status_label.config(text="Saving configuration..."))
-        self.after(0, lambda: self._log("Saving configuration..."))
-        self._save_settings()
+        if self._recreate_config:
+            self.after(0, lambda: self._status_label.config(text="Saving configuration..."))
+            self.after(0, lambda: self._log("Saving configuration..."))
+            self._save_settings()
+        else:
+            self.after(0, lambda: self._log("Keeping existing configuration."))
         self.after(0, lambda: self._progress_var.set(80))
 
         if self._create_shortcut.get():
@@ -566,6 +588,15 @@ $Shortcut.Save()
         if messagebox.askyesno("Cancel Installation",
                                "Are you sure you want to cancel the installation?"):
             self.destroy()
+
+
+def _existing_installation() -> bool:
+    if (APPDATA_DIR / "settings.json").is_file():
+        return True
+    default_dir = Path.home() / "AppData" / "Local" / APP_NAME
+    if (default_dir / "IACallMinute.exe").is_file():
+        return True
+    return False
 
 
 def main():
