@@ -20,6 +20,7 @@ import threading
 import tkinter as tk
 import urllib.request
 import zipfile
+import shutil
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -132,10 +133,10 @@ class InstallerWizard(tk.Tk):
 
         builder()
 
-        self._back_btn.config(state="normal" if self._current_step > 0 else "disabled")
+        self._back_btn.config(state="normal" if (0 < self._current_step < len(self._steps) - 1) else "disabled")
 
         if self._current_step == len(self._steps) - 1:
-            self._next_btn.config(text="Finish")
+            self._next_btn.config(text="Finish", state="normal")
         elif self._current_step == 6:
             self._next_btn.config(state="disabled")
         else:
@@ -378,6 +379,11 @@ class InstallerWizard(tk.Tk):
         self.after(0, lambda: self._log("Creating installation directory..."))
         install_dir.mkdir(parents=True, exist_ok=True)
         APPDATA_DIR.mkdir(parents=True, exist_ok=True)
+        self.after(0, lambda: self._progress_var.set(5))
+
+        self.after(0, lambda: self._status_label.config(text="Copying application..."))
+        self.after(0, lambda: self._log("Copying IACallMinute.exe..."))
+        self._copy_app(install_dir)
         self.after(0, lambda: self._progress_var.set(10))
 
         if self._stt_choice.get() == "offline" and self._download_now.get():
@@ -400,6 +406,31 @@ class InstallerWizard(tk.Tk):
         self.after(0, lambda: self._status_label.config(text="Finalizing..."))
         self.after(0, lambda: self._log("Installation complete!"))
         self.after(0, lambda: self._progress_var.set(100))
+
+    def _copy_app(self, install_dir: Path):
+        candidates = []
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(getattr(sys, "_MEIPASS", "")) / "IACallMinute.exe")
+        for p in [Path.cwd(), Path(__file__).resolve().parent]:
+            candidates.append(p / "IACallMinute.exe")
+            candidates.append(p / "dist" / "IACallMinute.exe")
+        src = None
+        for c in candidates:
+            try:
+                if c and c.exists():
+                    src = c
+                    break
+            except Exception:
+                pass
+        if src is None:
+            self.after(0, lambda: self._log("Warning: IACallMinute.exe not found; install manually."))
+            return
+        dst = install_dir / "IACallMinute.exe"
+        try:
+            shutil.copy2(src, dst)
+            self.after(0, lambda: self._log(f"Copied {src} -> {dst}"))
+        except Exception as e:
+            self.after(0, lambda: self._log(f"Warning: could not copy exe: {e}"))
 
     def _download_whisper(self):
         try:
