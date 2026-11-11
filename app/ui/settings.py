@@ -344,13 +344,20 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
             row=r, column=0, columnspan=2, sticky="w", pady=(0, 8))
         r += 1
 
-        ff = recorder.ffmpeg_path()
-        tk.Label(
-            f, text=("ffmpeg: OK — conversione MP3 attiva" if ff else
-                     "ffmpeg: ASSENTE — il pulsante «Salva registrazione…» "
-                     "salverà un WAV"),
-            bg=CARD, fg=(GREEN if ff else RED), font=FONT_MONO).grid(
-            row=r, column=0, columnspan=2, sticky="w")
+        self._ffmpeg_state = {"ffmpeg": {"busy": False, "p": 0.0, "err": ""}}
+        row = ttk.Frame(f, style="Card.TFrame")
+        row.grid(row=r, column=0, columnspan=2, sticky="ew")
+        row.columnconfigure(0, weight=1)
+        self._ffmpeg_label = tk.Label(row, text=".", bg=CARD, fg=MUTED,
+                                      font=FONT_MONO, anchor="w")
+        self._ffmpeg_label.grid(row=0, column=0, sticky="ew")
+        self._ffmpeg_dl = ttk.Button(row, text="Scarica ffmpeg",
+                                     command=self._dl_ffmpeg)
+        self._ffmpeg_del = ttk.Button(row, text="Elimina",
+                                      command=self._del_ffmpeg)
+        self._ffmpeg_del.grid(row=0, column=2, padx=2)
+        self._ffmpeg_dl.grid(row=0, column=1, padx=2)
+        self._refresh_ffmpeg()
         r += 2
 
         row = ttk.Frame(f, style="Card.TFrame")
@@ -670,6 +677,7 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
         self._refresh_rows(local_models.list_argos(), self._argos_rows,
                            self._argos_state)
         self._refresh_cuda_row()
+        self._refresh_ffmpeg()
 
     @staticmethod
     def _refresh_rows(items, rows, state) -> None:
@@ -699,12 +707,62 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
                 fg = RED
             row["status"].configure(text=txt, fg=fg)
 
+    def _refresh_ffmpeg(self) -> None:
+        label = getattr(self, "_ffmpeg_label", None)
+        if label is None:
+            return
+        st = self._ffmpeg_state.setdefault(
+            "ffmpeg", {"busy": False, "p": 0.0, "err": ""})
+        path = recorder.ffmpeg_path()
+        local = local_models.ffmpeg_present()
+        if st["busy"]:
+            txt = f"ffmpeg: download in corso. {int(st['p'] * 100)}%"
+            fg = MUTED
+            self._ffmpeg_dl.configure(state="disabled")
+            self._ffmpeg_del.configure(state="disabled")
+        elif st.get("err"):
+            txt = f"ffmpeg: errore: {st['err']}"
+            fg = RED
+            self._ffmpeg_dl.configure(state="normal")
+            self._ffmpeg_del.configure(state="disabled")
+        elif path:
+            txt = ("ffmpeg: OK - installato in modelli/ffmpeg"
+                   if local else "ffmpeg: OK - trovato nel PATH")
+            fg = GREEN
+            self._ffmpeg_dl.configure(state="disabled")
+            self._ffmpeg_del.configure(
+                state="normal" if local else "disabled")
+        else:
+            txt = (f"ffmpeg: ASSENTE - salvataggio MP3/MP4 non disponibile; "
+                   f"scarica ffmpeg (~{local_models.FFMPEG_SIZE_HINT_MB} MB)")
+            fg = RED
+            self._ffmpeg_dl.configure(state="normal")
+            self._ffmpeg_del.configure(state="disabled")
+        label.configure(text=txt, fg=fg)
+
+    def _dl_ffmpeg(self) -> None:
+        log.info("download ffmpeg in corso.")
+        self._ffmpeg_state = {"ffmpeg": {"busy": False, "p": 0.0, "err": ""}}
+        self._start_dl(
+            self._ffmpeg_state, "ffmpeg", "Download ffmpeg fallito",
+            lambda on_progress, on_done: local_models.download_ffmpeg(
+                on_progress=on_progress, on_done=on_done))
+
+    def _del_ffmpeg(self) -> None:
+        self._ask_delete(
+            "Elimina ffmpeg",
+            "Eliminare ffmpeg da modelli/ffmpeg?\n"
+            "Potrai riscaricarlo in seguito.",
+            "ffmpeg rimosso",
+            local_models.delete_ffmpeg)
+
     def _refresh_cuda_row(self) -> None:
         st = self._cuda_state.setdefault(
             "cuda", {"busy": False, "p": 0.0, "err": ""})
-        present = local_models.cuda_dll_present()
+        local = local_models.cuda_dll_present()
+        system = local_models.system_cuda_present()
         if st["busy"]:
-            txt = f"download in corso… {int(st['p'] * 100)}%"
+            txt = f"download in corso. {int(st['p'] * 100)}%"
             fg = MUTED
             self._cuda_dl.configure(state="disabled")
             self._cuda_del.configure(state="disabled")
@@ -713,15 +771,21 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
             fg = RED
             self._cuda_dl.configure(state="normal")
             self._cuda_del.configure(state="disabled")
-        elif present:
-            txt = (f"installate ({local_models.CUDA_DLL_DIR}) — usate con "
-                   "«Dispositivo: Automatico»")
+        elif local:
+            txt = (f"installate ({local_models.CUDA_DLL_DIR}) - usate con "
+                   "\"Dispositivo: Automatico\"")
             fg = GREEN
             self._cuda_dl.configure(state="disabled")
             self._cuda_del.configure(state="normal")
+        elif system:
+            txt = ("CUDA di sistema gia' installata - nessun download "
+                   "necessario; usa \"Dispositivo: Automatico\"")
+            fg = GREEN
+            self._cuda_dl.configure(state="disabled")
+            self._cuda_del.configure(state="disabled")
         else:
-            txt = (f"non installate — «Automatico» usa la CPU; download "
-                   f"stimato ≈{local_models._CUDA_SIZE_HINT_MB} MB "
+            txt = (f"non installate - \"Automatico\" usa la CPU; download "
+                   f"stimato ~{local_models._CUDA_SIZE_HINT_MB} MB "
                    "(nessuna installazione di sistema)")
             fg = MUTED
             self._cuda_dl.configure(state="normal")

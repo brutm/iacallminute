@@ -307,6 +307,119 @@ def delete_cuda_dlls() -> bool:
     return True
 
 
+def system_cuda_present() -> bool:
+    """True se cublas/cuDNN sono gia' installati nel sistema (PATH/CUDA_PATH).
+
+    In quel caso non serve scaricare le DLL locali: il loader di Windows le
+    trova gia' e Whisper puo' usare la GPU.
+    """
+    dirs: list[Path] = []
+    cuda_path = os.environ.get("CUDA_PATH", "").strip()
+    if cuda_path:
+        dirs.append(Path(cuda_path) / "bin")
+    toolkit = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA")
+    try:
+        dirs.extend(p / "bin" for p in toolkit.glob("v*"))
+    except OSError:
+        pass
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        low = entry.strip().lower()
+        if low and ("cuda" in low or "nvidia" in low):
+            dirs.append(Path(entry.strip()))
+    seen = set()
+    for d in dirs:
+        key = str(d).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if (d.is_dir()
+                    and list(d.glob("cublas64_*.dll"))
+                    and any(d.glob("cudnn64_*.dll"))):
+                return True
+        except OSError:
+            pass
+    return False
+
+
+# --- ffmpeg statico (opzionale, per MP3/MP4) ------------------------------ #
+FFMPEG_DIR = MODELS_DIR / "ffmpeg"
+FFMPEG_EXE = FFMPEG_DIR / "ffmpeg.exe"
+FFMPEG_ZIP_URL = ("https://www.gyan.dev/ffmpeg/builds/"
+                  "ffmpeg-release-essentials.zip")
+FFMPEG_SIZE_HINT_MB = 115
+
+
+def ffmpeg_present() -> bool:
+    try:
+        return FFMPEG_EXE.is_file()
+    except OSError:
+        return False
+
+
+def ffmpeg_path() -> str | None:
+    return str(FFMPEG_EXE) if ffmpeg_present() else None
+
+
+def delete_ffmpeg() -> bool:
+    if not FFMPEG_DIR.is_dir():
+        return False
+    shutil.rmtree(FFMPEG_DIR, ignore_errors=True)
+    return True
+
+
+def download_ffmpeg(on_progress: Callable[[float, str], None] | None = None,
+                    on_done: Callable[[bool, str], None] | None = None
+                    ) -> threading.Thread:
+    """Scarica un build statico di ffmpeg in modelli/ffmpeg (background)."""
+    def _job() -> None:
+        try:
+            import zipfile
+
+            import requests
+            if on_progress:
+                on_progress(0.02, "connessione a gyan.dev.")
+            ensure_dirs()
+            FFMPEG_DIR.mkdir(parents=True, exist_ok=True)
+            tmp = config.get_temp_root() / f"ffmpeg_{int(time.time())}.zip"
+            tmp.parent.mkdir(parents=True, exist_ok=True)
+            with requests.get(FFMPEG_ZIP_URL, stream=True,
+                              timeout=(20, 120),
+                              headers={"User-Agent": "IACallMinute"}) as r:
+                r.raise_for_status()
+                total = int(r.headers.get("content-length", 0))
+                done = 0
+                with open(tmp, "wb") as fh:
+                    for chunk in r.iter_content(1024 * 512):
+                        fh.write(chunk)
+                        done += len(chunk)
+                        if on_progress and total:
+                            on_progress(
+                                0.05 + 0.60 * done / total,
+                                f"download ffmpeg {done / 1e6:.1f}/"
+                                f"{total / 1e6:.1f} MB.")
+            if on_progress:
+                on_progress(0.70, "estrazione ffmpeg.")
+            with zipfile.ZipFile(tmp) as zf:
+                for name in zf.namelist():
+                    base = name.rsplit("/", 1)[-1].lower()
+                    if base in ("ffmpeg.exe", "ffprobe.exe"):
+                        (FFMPEG_DIR / base).write_bytes(zf.read(name))
+            tmp.unlink(missing_ok=True)
+            if not ffmpeg_present():
+                raise RuntimeError("ffmpeg.exe non trovato nell'archivio")
+            if on_done:
+                on_done(True, f"ffmpeg installato in {FFMPEG_DIR}")
+        except Exception as exc:            # noqa: BLE001
+            if on_done:
+                on_done(False, f"download ffmpeg fallito: {exc}")
+
+    t = threading.Thread(target=_job, daemon=True,
+                         name="iacm-dl-ffmpeg")
+    t.start()
+    return t
+
+
 def _download_cuda_wheel(pkg: str, on_progress, base: float,
                          span: float, tmp: Path) -> None:
     """Scarica un wheel di PyPI con progressione e lo salva in tmp."""

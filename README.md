@@ -46,8 +46,9 @@ python main.py
 ## Requirements
 
 - Windows 10/11 (WASAPI audio capture)
-- **Optional**: ffmpeg in PATH (for MP3 export; without it, saves as WAV)
+- **Optional**: ffmpeg (for MP3/MP4) - detected in PATH or downloadable from Settings; without it, saves as WAV
 - **For offline transcription**: Whisper model downloaded on first use (~500 MB for recommended "small" model)
+- **Optional GPU**: CUDA/cuDNN are detected automatically; missing DLLs can be downloaded from Settings
 
 ## Quick Start
 
@@ -162,8 +163,9 @@ python main.py
 ## Requisiti
 
 - Windows 10/11 (cattura audio WASAPI)
-- **Opzionale**: ffmpeg nel PATH (per esportazione MP3; senza, salva in WAV)
+- **Opzionale**: ffmpeg (per MP3/MP4) - rilevato nel PATH o scaricabile dalle Impostazioni; senza, salva in WAV
 - **Per trascrizione offline**: modello Whisper scaricato al primo uso (~500 MB per il modello "small" consigliato)
+- **GPU opzionale**: CUDA/cuDNN rilevate automaticamente; le DLL mancanti si scaricano dalle Impostazioni
 
 ## Guida Rapida
 
@@ -244,7 +246,7 @@ MIT License - vedi [LICENSE](LICENSE) per i dettagli.
 |-------------------|----------------------|
 | No transcription / Nessuna trascrizione | Check the **level** indicator; if flat, select a different **System Audio** device | Controlla l'indicatore **livello**; se piatto, seleziona un diverso dispositivo **Audio sistema** |
 | Microphone not captured / Microfono non catturato | Allow microphone access in Windows Settings → Privacy → Microphone | Consenti l'accesso al microfono in Impostazioni → Privacy → Microfono |
-| No MP3 output / Nessun MP3 | Install ffmpeg (`winget install ffmpeg`); without it, saves as WAV | Installa ffmpeg (`winget install ffmpeg`); senza, salva in WAV |
+| No MP3 output / Nessun MP3 | Download ffmpeg from Settings (or `winget install ffmpeg`); without it, saves as WAV | Scarica ffmpeg dalle Impostazioni (o `winget install ffmpeg`); senza, salva in WAV |
 | 429 quota error / Errore quota 429 | The app retries automatically; wait or switch to a different model | L'app riprova automaticamente; attendi o cambia modello |
 | Recording not saved / Registrazione non salvata | Press **Save recording...** before closing the app | Premi **Salva registrazione...** prima di chiudere l'app |
 

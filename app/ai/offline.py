@@ -79,7 +79,7 @@ def _maybe_ensure_cuda_dlls() -> None:
     except Exception:                   # noqa: BLE001
         return
     from . import local_models
-    if local_models.cuda_dll_present():
+    if local_models.cuda_dll_present() or local_models.system_cuda_present():
         return
     _cuda_dl_busy = True
     log.info("GPU senza DLL: scarico le librerie CUDA in background "
@@ -193,7 +193,12 @@ def gpu_info() -> str:
         name = out.splitlines()[0].strip() if out else ""
     except Exception:                   # noqa: BLE001
         name = ""
-    if _cuda_dll_dirs():
+    from . import local_models
+    if local_models.cuda_dll_present():
+        note = f"DLL locali in {local_models.CUDA_DLL_DIR}"
+    elif local_models.system_cuda_present():
+        note = "CUDA di sistema gia' installata"
+    elif _cuda_dll_dirs():
         note = "DLL presenti in " + str(_cuda_dll_dirs()[0])
     else:
         note = "DLL CUDA assenti nella cartella modelli: uso CPU"

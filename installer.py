@@ -25,9 +25,12 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "IACallMinute"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 
 APPDATA_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
+
+FFMPEG_ZIP_URL = ("https://www.gyan.dev/ffmpeg/builds/"
+                  "ffmpeg-release-essentials.zip")
 
 WHISPER_SIZES = {
     "tiny": ("Tiny", "~75 MB", "Fastest, lower accuracy"),
@@ -67,6 +70,77 @@ def apply_style(root: tk.Tk) -> ttk.Style:
     return style
 
 
+def _ffmpeg_present(install_dir: Path | None = None) -> bool:
+    if shutil.which("ffmpeg"):
+        return True
+    if install_dir is not None:
+        exe = Path(install_dir) / "modelli" / "ffmpeg" / "ffmpeg.exe"
+        return exe.is_file()
+    return False
+
+
+def _cuda_status_text() -> str:
+    dirs: list[Path] = []
+    cuda_path = os.environ.get("CUDA_PATH", "").strip()
+    if cuda_path:
+        dirs.append(Path(cuda_path) / "bin")
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        low = entry.strip().lower()
+        if low and ("cuda" in low or "nvidia" in low):
+            dirs.append(Path(entry.strip()))
+    for d in dirs:
+        try:
+            if (d.is_dir()
+                    and list(d.glob("cublas64_*.dll"))
+                    and any(d.glob("cudnn64_*.dll"))):
+                return ("CUDA gia' installata nel sistema: Whisper potra' "
+                        "usare la GPU senza download aggiuntivi.")
+        except OSError:
+            pass
+    if shutil.which("nvidia-smi"):
+        return ("NVIDIA GPU rilevata: le DLL CUDA opzionali si possono "
+                "scaricare dall'app (Dispositivo: Automatico).")
+    return ("Nessuna GPU CUDA rilevata: Whisper usera' la CPU "
+            "(le DLL CUDA opzionali si scaricano dall'app).")
+
+
+def _download_ffmpeg(install_dir: Path, log_fn) -> Path | None:
+    """Scarica un build statico di ffmpeg e lo estrae in modelli/ffmpeg."""
+    dest = Path(install_dir) / "modelli" / "ffmpeg"
+    dest.mkdir(parents=True, exist_ok=True)
+    tmp_zip = dest / "ffmpeg.zip"
+    req = urllib.request.Request(
+        FFMPEG_ZIP_URL, headers={"User-Agent": "IACallMinute-Setup"})
+    log_fn("Downloading ffmpeg (about 110 MB)...")
+    with urllib.request.urlopen(req, timeout=60) as resp, \
+            open(tmp_zip, "wb") as fh:
+        total = int(resp.headers.get("Content-Length") or 0)
+        done = 0
+        last = -10
+        while True:
+            chunk = resp.read(1024 * 512)
+            if not chunk:
+                break
+            fh.write(chunk)
+            done += len(chunk)
+            if total:
+                pct = int(done * 100 / total)
+                if pct >= last + 10:
+                    last = pct
+                    log_fn(f"ffmpeg download {pct}%")
+    with zipfile.ZipFile(tmp_zip) as zf:
+        for name in zf.namelist():
+            base = name.rsplit("/", 1)[-1].lower()
+            if base in ("ffmpeg.exe", "ffprobe.exe"):
+                (dest / base).write_bytes(zf.read(name))
+    tmp_zip.unlink(missing_ok=True)
+    exe = dest / "ffmpeg.exe"
+    if exe.is_file():
+        log_fn(f"ffmpeg installed: {exe}")
+        return exe
+    raise RuntimeError("ffmpeg.exe non trovato nell'archivio scaricato")
+
+
 class InstallerWizard(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -93,6 +167,7 @@ class InstallerWizard(tk.Tk):
         self._stt_choice = tk.StringVar(value="offline")
         self._whisper_size = tk.StringVar(value="small")
         self._download_now = tk.BooleanVar(value=True)
+        self._download_ffmpeg = tk.BooleanVar(value=True)
         self._text_choice = tk.StringVar(value="gemini")
         self._api_key = tk.StringVar()
         self._api_url = tk.StringVar(value="https://api.openai.com/v1")
@@ -156,6 +231,18 @@ class InstallerWizard(tk.Tk):
             self._next_btn.config(state="disabled")
         else:
             self._next_btn.config(text="Next >", state="normal")
+
+        self._fit_window()
+
+    def _fit_window(self):
+        """Allarga la finestra se il contenuto supera l'altezza attuale,
+        cosi' i pulsanti di navigazione restano sempre visibili."""
+        self.update_idletasks()
+        width = max(self.winfo_width(), 650)
+        height = max(self.winfo_height(), 550)
+        need = self.winfo_reqheight() + 10
+        if need > height:
+            self.geometry(f"{width}x{need}")
 
     def _next_step(self):
         if self._current_step == len(self._steps) - 1:
@@ -275,9 +362,27 @@ class InstallerWizard(tk.Tk):
                         variable=self._download_now, value=False).pack(anchor="w", pady=5)
 
         ttk.Label(self._main_frame,
-                  text="\nNote: The download may take several minutes depending on your connection.\n"
+                  text="Note: The download may take several minutes depending on your connection.\n"
                        "You can always download additional models later.",
-                  style="Muted.TLabel", wraplength=580).pack(anchor="w", pady=(20, 0))
+                  style="Muted.TLabel", wraplength=580).pack(anchor="w", pady=(10, 0))
+
+        ttk.Separator(self._main_frame).pack(fill="x", pady=(15, 10))
+
+        ff = _ffmpeg_present(Path(self._install_dir.get()))
+        ttk.Label(self._main_frame, text="Multimedia (ffmpeg)", style="TLabel").pack(anchor="w")
+        if ff:
+            ttk.Label(self._main_frame, text="ffmpeg already available on this system.",
+                      style="Muted.TLabel").pack(anchor="w")
+        else:
+            ttk.Label(self._main_frame,
+                      text="ffmpeg not found: it is needed for MP3 audio and MP4 video.",
+                      style="Muted.TLabel", wraplength=580).pack(anchor="w")
+            ttk.Checkbutton(self._main_frame,
+                            text="Download ffmpeg during installation (recommended)",
+                            variable=self._download_ffmpeg).pack(anchor="w", pady=(4, 0))
+
+        ttk.Label(self._main_frame, text=_cuda_status_text(),
+                  style="Muted.TLabel", wraplength=580).pack(anchor="w", pady=(10, 0))
 
     def _build_text_provider(self):
         ttk.Label(self._main_frame, text="Which AI should generate summaries and minutes?",
@@ -405,6 +510,11 @@ class InstallerWizard(tk.Tk):
         self._copy_app(install_dir)
         self.after(0, lambda: self._progress_var.set(10))
 
+        if self._download_ffmpeg.get():
+            self.after(0, lambda: self._status_label.config(text="Checking ffmpeg..."))
+            self._ensure_ffmpeg(install_dir)
+            self.after(0, lambda: self._progress_var.set(25))
+
         if self._recreate_config and self._stt_choice.get() == "offline" and self._download_now.get():
             self.after(0, lambda: self._status_label.config(text="Downloading Whisper model..."))
             self.after(0, lambda: self._log("Downloading Whisper model (this may take a while)..."))
@@ -453,6 +563,21 @@ class InstallerWizard(tk.Tk):
             self.after(0, lambda: self._log(f"Copied {src} -> {dst}"))
         except Exception as e:
             self.after(0, lambda: self._log(f"Warning: could not copy exe: {e}"))
+
+    def _ensure_ffmpeg(self, install_dir: Path):
+        if _ffmpeg_present(install_dir):
+            self.after(0, lambda: self._log("ffmpeg already available, skipping download."))
+            return
+        self.after(0, lambda: self._status_label.config(text="Downloading ffmpeg..."))
+        try:
+            _download_ffmpeg(
+                install_dir,
+                lambda msg: self.after(0, lambda m=msg: self._log(m)),
+            )
+        except Exception as e:                  # noqa: BLE001
+            self.after(0, lambda: self._log(f"Warning: ffmpeg download failed: {e}"))
+            self.after(0, lambda: self._log(
+                "You can install ffmpeg later from the app settings."))
 
     def _download_whisper(self):
         try:

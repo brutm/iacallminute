@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import re
-import shutil
 import subprocess
 import threading
 import time
@@ -16,15 +15,17 @@ from pathlib import Path
 
 import mss
 from .. import subproc
+from . import recorder
 
 log = logging.getLogger("iacm.screenrec")
 
 
 def ffmpeg_bin() -> str:
-    path = shutil.which("ffmpeg")
+    path = recorder.ffmpeg_path()
     if not path:
         raise RuntimeError(
-            "ffmpeg non trovato nel PATH (serve per la codifica MP4)")
+            "ffmpeg non trovato (serve per la codifica MP4): installalo "
+            "dalle impostazioni o mettilo nel PATH")
     return path
 
 

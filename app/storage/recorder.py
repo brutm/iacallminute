@@ -23,7 +23,14 @@ def temp_wav_path(session_dir: Path) -> Path:
 
 
 def ffmpeg_path() -> str | None:
-    return shutil.which("ffmpeg")
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    try:
+        from ..ai import local_models
+        return local_models.ffmpeg_path()
+    except Exception:                       # noqa: BLE001
+        return None
 
 
 def wav_duration(path: Path) -> float:
