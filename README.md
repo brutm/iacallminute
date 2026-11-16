@@ -17,7 +17,7 @@ Captures system audio (+ optional microphone), transcribes live during calls (Te
 - **Offline transcription** with Whisper (no internet required, no API costs)
 - **Automatic stop** at timer expiry or when call ends
 - **Bilingual output**: original language + translation
-- **Context-aware**: add project notes and folder analysis for better summaries
+- **Context-aware**: add project notes, free-form AI instructions, exact name/term corrections and folder analysis for better summaries
 
 ## Installation
 
@@ -134,7 +134,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 - **Trascrizione offline** con Whisper (senza internet, senza costi API)
 - **Arresto automatico** allo scadere del timer o alla fine della chiamata
 - **Output bilingue**: lingua originale + traduzione
-- **Contesto**: aggiungi note e analisi cartella progetto per riassunti migliori
+- **Contesto**: note, istruzioni libere, correzioni esatte di nomi/termini e analisi cartella progetto per riassunti migliori
 
 ## Installazione
 
@@ -211,6 +211,10 @@ python main.py
 - Registra l'intero schermo, una finestra specifica, o una regione personalizzata
 - Output: MP4 con audio incorporato
 - Analisi video opzionale: l'AI descrive cosa è apparso a schermo
+
+### Microfono
+- Se il microfono è impostato su **Disattivato**, un banner avvisa che verrà registrato solo l'audio di sistema
+- Se il microfono scelto resta silenzioso per 12 secondi mentre il sistema produce audio, l'app avvisa che potrebbe essere mutato in Windows o dal tasto fisico
 
 ### Modalità Offline
 - I modelli Whisper girano localmente (no internet dopo il download iniziale)

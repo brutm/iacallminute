@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 APP_NAME = "IACallMinute"
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 
 TARGET_RATE = 16000  # Hz, mono, int16: formato unico di tutto il pipeline
 
@@ -160,6 +160,8 @@ def load_settings() -> dict:
                 # non viene mai letto da (né scritto su) settings.json
                 data.pop("context_notes", None)
                 data.pop("context_folder", None)
+                data.pop("context_instructions", None)
+                data.pop("context_replacements", None)
                 # la casella «Con video» non si memorizza piu': di default
                 # la sessione e' senza video (C:/Temp si riempiva di MP4)
                 data.pop("record_video", None)
@@ -177,7 +179,9 @@ def save_settings() -> None:
     try:
         APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         dump = {k: v for k, v in SETTINGS.items()
-                if k not in ("context_notes", "context_folder")}
+                if k not in ("context_notes", "context_folder",
+                             "context_instructions",
+                             "context_replacements")}
         SETTINGS_FILE.write_text(
             json.dumps(dump, indent=2, ensure_ascii=False),
             encoding="utf-8")

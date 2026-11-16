@@ -338,10 +338,24 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
         r += 2
 
         ttk.Checkbutton(
-            f, text="Salva il log su file — di default SCONSPIRATO "
+            f, text="Salva il log su file - di default SCONSPIRATO "
                     "(nessun file, nessun spazio occupato)",
             variable=self.log_var).grid(
             row=r, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        r += 1
+
+        models_row = ttk.Frame(f, style="Card.TFrame")
+        models_row.grid(row=r, column=0, columnspan=2, sticky="ew",
+                        pady=(0, 8))
+        models_row.columnconfigure(0, weight=1)
+        tk.Label(models_row, text="Modelli locali:", bg=CARD, fg=MUTED,
+                 font=FONT_SMALL).grid(row=0, column=0, sticky="w")
+        tk.Label(models_row, text=str(local_models.MODELS_DIR), bg=CARD,
+                 fg=BLUE, font=FONT_MONO, anchor="w").grid(
+            row=1, column=0, sticky="w")
+        ttk.Button(models_row, text="Apri cartella modelli",
+                   command=self._open_models_dir).grid(
+            row=0, column=1, rowspan=2, padx=(8, 0), sticky="e")
         r += 1
 
         self._ffmpeg_state = {"ffmpeg": {"busy": False, "p": 0.0, "err": ""}}
@@ -627,10 +641,9 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
 
         foot = tk.Frame(f, bg=CARD)
         foot.grid(row=r, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-        tk.Label(foot, text=f"I modelli sono in {local_models.MODELS_DIR}, "
-                            f"nella cartella dell'applicazione.",
-                 bg=CARD, fg=MUTED, font=HINT_FONT, justify="left").grid(
-            row=0, column=0, sticky="w")
+        tk.Label(foot, text=f"Cartella modelli: {local_models.MODELS_DIR}",
+                 bg=CARD, fg=MUTED, font=HINT_FONT, justify="left",
+                 wraplength=620).grid(row=0, column=0, sticky="w")
         ttk.Button(foot, text="Apri cartella modelli",
                    command=self._open_models_dir).grid(
             row=0, column=1, padx=(8, 0), sticky="e")
@@ -686,9 +699,11 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
             if not row:
                 continue
             st = state.setdefault(m.id, {"busy": False, "p": 0.0,
-                                         "err": ""})
+                                         "err": "", "msg": ""})
             if st["busy"]:
-                txt = f"download in corso… {int(st['p'] * 100)}%"
+                txt = f"download in corso. {int(st['p'] * 100)}%"
+                if st.get("msg"):
+                    txt += f" - {st['msg']}"
                 fg = MUTED
                 row["btn_dl"].configure(state="disabled")
                 row["btn_del"].configure(state="disabled")
@@ -832,9 +847,11 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
                 pair, on_progress=on_progress, on_done=on_done))
 
     def _start_dl(self, state, key, err_title, start) -> None:
-        st = state.setdefault(key, {"busy": False, "p": 0.0, "err": ""})
+        st = state.setdefault(key, {"busy": False, "p": 0.0, "err": "",
+                                    "msg": ""})
         st["busy"] = True
         st["err"] = ""
+        st["msg"] = ""
         self._refresh_local_models()
         # i callback arrivano da un thread: tornano nel thread Tk con after
         start(
@@ -845,17 +862,21 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
         )
 
     def _set_progress(self, state, key, p: float, msg: str) -> None:
-        st = state.setdefault(key, {"busy": False, "p": 0.0, "err": ""})
+        st = state.setdefault(key, {"busy": False, "p": 0.0, "err": "",
+                                    "msg": ""})
         st["busy"] = True
         st["p"] = p
+        st["msg"] = msg or ""
         self._refresh_local_models()
 
     def _set_done(self, state, key, ok: bool, msg: str,
                   err_title: str) -> None:
         log.info("%s: %s (%s)", key, "ok" if ok else "fail", msg)
-        st = state.setdefault(key, {"busy": False, "p": 0.0, "err": ""})
+        st = state.setdefault(key, {"busy": False, "p": 0.0, "err": "",
+                                    "msg": ""})
         st["busy"] = False
         st["err"] = "" if ok else msg
+        st["msg"] = ""
         self._refresh_local_models()
         if not ok:
             messagebox.showerror(err_title, msg, parent=self)
@@ -1081,6 +1102,8 @@ class SettingsDialog(SafeDestroy, tk.Toplevel):
             "log_enabled": bool(self.log_var.get()),
             "context_notes": s.get("context_notes", ""),
             "context_folder": s.get("context_folder", ""),
+            "context_instructions": s.get("context_instructions", ""),
+            "context_replacements": s.get("context_replacements", ""),
             "stt": {
                 "type": stt_type,
                 "api_key": self.stt_key.get().strip(),

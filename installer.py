@@ -25,7 +25,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "IACallMinute"
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 
 APPDATA_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 

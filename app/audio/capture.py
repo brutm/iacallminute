@@ -228,6 +228,11 @@ class AudioSession:
         self._lock = threading.Lock()
         self.running = False
         self.started_at: float | None = None
+        # livelli RMS (0..1) dell'ultimo tick: servono all'UI per accorgersi
+        # di un microfono muto/disattivato mentre il sistema continua a
+        # produrre audio.
+        self.system_level = 0.0
+        self.mic_level: float | None = None
 
     # -- ciclo di vita --------------------------------------------------------
     def start(self) -> None:
@@ -235,6 +240,8 @@ class AudioSession:
             return
         self._stop.clear()
         self._sample_count = 0
+        self.system_level = 0.0
+        self.mic_level = None
         self._segmenter = Segmenter()
 
         if self.wav_path is not None:
@@ -291,6 +298,8 @@ class AudioSession:
                 pass
             self._wav = None
         self._sources = []
+        self.system_level = 0.0
+        self.mic_level = None
         self.on_status("cattura audio fermata")
         return {"duration": duration, "samples": self._sample_count}
 
@@ -301,6 +310,12 @@ class AudioSession:
         self._sources = []
 
     # -- mixer ----------------------------------------------------------------
+    @staticmethod
+    def _rms(part: np.ndarray) -> float:
+        if not part.size:
+            return 0.0
+        return float(np.sqrt(np.mean(part.astype(np.float32) ** 2))) / 32768.0
+
     def _mix_tick(self, n: int) -> tuple[np.ndarray, float]:
         parts = [s.pop(n) for s in self._sources]
         mixed = parts[0]
@@ -308,8 +323,12 @@ class AudioSession:
             mixed = np.clip(
                 mixed.astype(np.int32) + p.astype(np.int32), -32768, 32767
             ).astype(np.int16)
-        rms = float(np.sqrt(np.mean(mixed.astype(np.float32) ** 2))) if mixed.size else 0.0
-        return mixed, rms / 32768.0
+        self.system_level = self._rms(parts[0]) if parts else 0.0
+        self.mic_level = (
+            self._rms(parts[1])
+            if self.mic_device is not None and len(parts) > 1 else None
+        )
+        return mixed, self._rms(mixed)
 
     def _emit(self, start_idx: int, pcm: np.ndarray) -> None:
         try:

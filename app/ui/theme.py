@@ -17,6 +17,12 @@ GREEN_D = "#15803d"
 RED = "#dc2626"
 RED_D = "#b91c1c"
 AMBER = "#d97706"
+BLUE_SOFT = "#eff6ff"
+BLUE_SOFT_D = "#dbeafe"
+GREEN_SOFT = "#ecfdf5"
+AMBER_SOFT = "#fffbeb"
+RED_SOFT = "#fef2f2"
+SURFACE = "#f8fafc"
 TRACK = "#e2e8f0"
 
 FONT = ("Segoe UI", 10)
@@ -83,6 +89,12 @@ def apply_style(root: tk.Tk) -> ttk.Style:
     style.map("Accent.TButton",
               background=[("active", BLUE_D), ("disabled", "#93c5fd")],
               foreground=[("disabled", "#eff6ff")])
+
+    style.configure("Soft.TButton", background=BLUE_SOFT, foreground=BLUE_D,
+                    font=("Segoe UI Semibold", 10), padding=(12, 6))
+    style.map("Soft.TButton",
+              background=[("active", BLUE_SOFT_D), ("disabled", "#f1f5f9")],
+              foreground=[("disabled", "#94a3b8")])
 
     style.configure("TCheckbutton", background=CARD, foreground=INK, font=FONT)
     style.map("TCheckbutton", background=[("active", CARD)],

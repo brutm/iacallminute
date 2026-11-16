@@ -204,13 +204,47 @@ def delete_argos(pair: str) -> bool:
     return True
 
 
+def _repo_total_bytes(repo_id: str) -> int:
+    """Dimensione totale dei file del repo HF, 0 se non ricavabile."""
+    try:
+        from huggingface_hub import HfApi
+        info = HfApi().model_info(repo_id, files_metadata=True)
+        total = 0
+        for sibling in getattr(info, "siblings", None) or []:
+            size = getattr(sibling, "size", None)
+            if isinstance(size, int):
+                total += size
+        return total
+    except Exception:
+        return 0
+
+
+def _watch_download(target: Path, expected: int, stop: threading.Event,
+                    on_progress: Callable[[float, str], None] | None,
+                    floor: float = 0.02) -> None:
+    """Aggiorna la percentuale sommando i byte gia' scritti nella cartella."""
+    while not stop.wait(0.4):
+        try:
+            got = _dir_size(target)
+            if expected <= 0:
+                continue
+            frac = min(0.99, got / expected)
+            if on_progress:
+                on_progress(max(floor, frac),
+                            f"{got / 1e6:.0f} MB / {expected / 1e6:.0f} MB")
+        except Exception:
+            pass
+
+
 def download_whisper(name: str, on_progress: Callable[[float, str], None] | None = None,
                      on_done: Callable[[bool, str], None] | None = None) -> threading.Thread:
     """Scarica il modello Whisper in background dentro modelli/whisper/<nome>."""
     def _job() -> None:
+        stop = threading.Event()
+        watcher: threading.Thread | None = None
         try:
             if on_progress:
-                on_progress(0.02, f"connessione a HuggingFace…")
+                on_progress(0.02, f"connessione a HuggingFace.")
             try:
                 from huggingface_hub import snapshot_download
             except ImportError:
@@ -218,16 +252,33 @@ def download_whisper(name: str, on_progress: Callable[[float, str], None] | None
                     on_done(False, "pacchetto 'huggingface_hub' non installato")
                 return
             ensure_dirs()
+            repo_id = f"Systran/faster-whisper-{name}"
+            target = whisper_path(name)
+            expected = _repo_total_bytes(repo_id) or (
+                WHISPER_SIZE_HINT_MB.get(name, 0) * 1_000_000)
+            watcher = threading.Thread(
+                target=_watch_download,
+                args=(target, expected, stop, on_progress),
+                daemon=True, name=f"iacm-dl-whisper-watch-{name}")
+            watcher.start()
             snapshot_download(
-                repo_id=f"Systran/faster-whisper-{name}",
-                local_dir=str(whisper_path(name)),
+                repo_id=repo_id,
+                local_dir=str(target),
                 tqdm_class=None,
             )
+            stop.set()
+            watcher.join(timeout=2)
+            if on_progress:
+                on_progress(1.0, "download completato")
             if on_done:
                 on_done(True, f"modello '{name}' scaricato")
         except Exception as exc:
             if on_done:
                 on_done(False, f"download fallito: {exc}")
+        finally:
+            stop.set()
+            if watcher is not None:
+                watcher.join(timeout=2)
 
     t = threading.Thread(target=_job, daemon=True, name=f"iacm-dl-whisper-{name}")
     t.start()

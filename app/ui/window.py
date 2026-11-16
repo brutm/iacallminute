@@ -24,9 +24,10 @@ from .progress import SaveProgressDialog
 from .screen import ScreenDialog
 from .settings import SettingsDialog
 from .tkutil import SafeDestroy, ui_scale
-from .theme import (AMBER, BG, BLUE, BORDER, CARD, FONT, FONT_B, FONT_HEADER,
-                    FONT_MONO, FONT_SMALL, GREEN, HEADER, INK, MUTED, RED,
-                    TRACK, apply_style)
+from .theme import (AMBER, AMBER_SOFT, BG, BLUE, BLUE_D, BLUE_SOFT,
+                    BLUE_SOFT_D, BORDER, CARD, FONT, FONT_B, FONT_HEADER,
+                    FONT_MONO, FONT_SMALL, GREEN, GREEN_SOFT, HEADER, INK,
+                    MUTED, RED, RED_SOFT, SURFACE, TRACK, apply_style)
 
 # Nome del documento/file per tipo di output generato (default: riassunto).
 DOC_STEM = {"minutes": "minute", "video": "analisi_video"}
@@ -40,7 +41,8 @@ class ContextDialog(tk.Toplevel):
     Finestra singola: se già aperta viene solo messa in primo piano.
     """
 
-    def __init__(self, parent: tk.Misc, notes: str = "", folder: str = ""):
+    def __init__(self, parent: tk.Misc, notes: str = "", folder: str = "",
+                 instructions: str = "", replacements: str = ""):
         super().__init__(parent)
         self.title("Contesto della chiamata")
         self.transient(parent)
@@ -55,11 +57,11 @@ class ContextDialog(tk.Toplevel):
         outer.columnconfigure(1, weight=1)
 
         tk.Label(outer,
-                 text="Contesto — scrivilo PRIMA (o durante) la call, così "
-                      "l'IA capisce di cosa si parla",
+                 text="Contesto e correzioni — scrivili PRIMA (o durante) la "
+                      "call: l'IA capisce di cosa si parla",
                  bg=CARD, fg=BLUE, font=("Segoe UI Semibold", 11)).grid(
             row=0, column=0, columnspan=3, sticky="w")
-        self.notes = tk.Text(outer, width=72, height=5, wrap="word", font=FONT,
+        self.notes = tk.Text(outer, width=100, height=4, wrap="word", font=FONT,
                              relief="solid", borderwidth=1,
                              highlightbackground=BORDER,
                              highlightcolor=BORDER, highlightthickness=1,
@@ -83,21 +85,58 @@ class ContextDialog(tk.Toplevel):
             row=4, column=2, pady=(4, 2))
         tk.Label(outer,
                  text="Esempio: la cartella del progetto di cui parli nel "
-                      "contesto — l'IA ne legge README e struttura.",
+                      "contesto - l'IA ne legge README e struttura.",
                  bg=CARD, fg=MUTED, font=("Segoe UI", 9), justify="left").grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(2, 14))
+            row=5, column=0, columnspan=3, sticky="w", pady=(2, 12))
+
+        tk.Label(outer,
+                 text="Istruzioni libere per l'IA (facoltativo)",
+                 bg=CARD, fg=BLUE, font=("Segoe UI Semibold", 11)).grid(
+            row=6, column=0, columnspan=3, sticky="w")
+        self.instructions = tk.Text(
+            outer, width=100, height=3, wrap="word", font=FONT,
+            relief="solid", borderwidth=1, highlightbackground=BORDER,
+            highlightcolor=BORDER, highlightthickness=1,
+            insertbackground=INK)
+        self.instructions.grid(row=7, column=0, columnspan=3, sticky="nsew",
+                               pady=(4, 2))
+        tk.Label(outer,
+                 text="Esempio: «quando si parla di progetto Alfa in realtà "
+                      "s'intende il progetto Beta; il nome Rossi è "
+                      "Rossetti».",
+                 bg=CARD, fg=MUTED, font=("Segoe UI", 9), justify="left").grid(
+            row=8, column=0, columnspan=3, sticky="w", pady=(0, 12))
+
+        tk.Label(outer,
+                 text="Sostituzioni esatte: una per riga (errato = corretto)",
+                 bg=CARD, fg=BLUE, font=("Segoe UI Semibold", 11)).grid(
+            row=9, column=0, columnspan=3, sticky="w")
+        self.replacements = tk.Text(
+            outer, width=100, height=3, wrap="word", font=FONT,
+            relief="solid", borderwidth=1, highlightbackground=BORDER,
+            highlightcolor=BORDER, highlightthickness=1,
+            insertbackground=INK)
+        self.replacements.grid(row=10, column=0, columnspan=3,
+                               sticky="nsew", pady=(4, 2))
+        tk.Label(outer,
+                 text="Esempio: «Marco Rossi = Marco Rossetti» — applicate "
+                      "alla trascrizione prima di Riassunto e Minute.",
+                 bg=CARD, fg=MUTED, font=("Segoe UI", 9), justify="left").grid(
+            row=11, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
         btns = ttk.Frame(outer, style="Card.TFrame")
-        btns.grid(row=6, column=0, columnspan=3, sticky="e")
+        btns.grid(row=12, column=0, columnspan=3, sticky="e")
         ttk.Button(btns, text="Annulla", command=self.destroy).grid(
             row=0, column=0, padx=(0, 8))
         ttk.Button(btns, text="Salva contesto", style="Accent.TButton",
                    command=self._ok).grid(row=0, column=1)
 
-        self.bind("<Return>", lambda e: self._ok())
         self.bind("<Escape>", lambda e: self.destroy())
+        self.bind("<Control-Return>", lambda e: self._ok())
         self.grab_set()
         self.notes.insert("1.0", notes)
+        self.instructions.insert("1.0", instructions)
+        self.replacements.insert("1.0", replacements)
         self.notes.focus_set()
 
     def _browse(self) -> None:
@@ -110,6 +149,8 @@ class ContextDialog(tk.Toplevel):
         self.result = {
             "notes": self.notes.get("1.0", "end").strip(),
             "folder": self.folder_var.get().strip() or None,
+            "instructions": self.instructions.get("1.0", "end").strip(),
+            "replacements": self.replacements.get("1.0", "end").strip(),
         }
         self.destroy()
 
@@ -437,6 +478,9 @@ class App(SafeDestroy, tk.Tk):
         self._seg_count = 0
         self._sess_peak = 0.0
         self._sess_devices = ""
+        self._mic_warn_kind = ""
+        self._mic_silent_since: float | None = None
+        self._mic_warned_silent = False
         self._reset_volume_check()
         self.viewer: ResultViewer | None = None
         self._context_dlg: ContextDialog | None = None
@@ -546,7 +590,7 @@ class App(SafeDestroy, tk.Tk):
         self.header_model.grid(row=0, column=7, padx=(0, 12))
 
         # --- card configurazione ---
-        card = tk.Frame(self, bg=CARD, highlightbackground=BORDER,
+        card = tk.Frame(self, bg=CARD, highlightbackground=BLUE_SOFT_D,
                         highlightthickness=1, padx=14, pady=12)
         card.grid(row=1, column=0, columnspan=2, sticky="ew", padx=14,
                   pady=(12, 6))
@@ -670,10 +714,17 @@ class App(SafeDestroy, tk.Tk):
                 side="left", padx=(10, 0))
         self._sync_autostop_widgets()
 
+        self.mic_warn_lbl = tk.Label(
+            card, text="", bg="#fef3c7", fg=AMBER, font=FONT_SMALL,
+            anchor="w", justify="left", padx=10, pady=6, wraplength=900)
+        self.mic_warn_lbl.grid(row=11, column=0, columnspan=3, sticky="ew",
+                               pady=(10, 0))
+        self.mic_warn_lbl.grid_remove()
+
         self.start_btn = ttk.Button(
-            card, text="▶   AVVIA REGISTRAZIONE", style="Success.TButton",
+            card, text="\u25b6   AVVIA REGISTRAZIONE", style="Success.TButton",
             command=self._on_start)
-        self.start_btn.grid(row=11, column=0, columnspan=3, sticky="ew",
+        self.start_btn.grid(row=12, column=0, columnspan=3, sticky="ew",
                             pady=(14, 0), ipady=2)
 
         # --- barra comandi (due righe: niente pulsanti tagliati) ---
@@ -693,7 +744,7 @@ class App(SafeDestroy, tk.Tk):
             line1, text="Traduzione live", style="Bg.TCheckbutton",
             variable=self.bilingual_var, command=self._toggle_translation)
         self.tr_live_cb.pack(side="left")
-        self.context_btn = ttk.Button(line1, text="Contesto",
+        self.context_btn = ttk.Button(line1, text="\u270e  Contesto",
                                       style="Accent.TButton",
                                       command=self._on_context)
         self.context_btn.pack(side="right")
@@ -713,25 +764,47 @@ class App(SafeDestroy, tk.Tk):
         ttk.Separator(line2, orient="vertical").pack(
             side="left", fill="y", padx=10, pady=2)
         self.summary_btn = ttk.Button(line2, text="Riassunto",
+                                      style="Soft.TButton",
                                       command=self._on_summary)
         self.summary_btn.pack(side="left", padx=4)
         self.minutes_btn = ttk.Button(line2, text="Minute",
+                                      style="Soft.TButton",
                                       command=self._on_minutes)
         self.minutes_btn.pack(side="left", padx=4)
-        self.analysis_btn = ttk.Button(line2, text="Analisi video…",
+        self.analysis_btn = ttk.Button(line2, text="Analisi video.",
+                                       style="Soft.TButton",
                                        command=self._on_video_analysis)
         self.analysis_btn.pack(side="left", padx=4)
 
         # --- trascrizione live ---
-        body = tk.Frame(self, bg=CARD, highlightbackground=BORDER,
+        body = tk.Frame(self, bg=CARD, highlightbackground=BLUE_SOFT_D,
                         highlightthickness=1)
         body.grid(row=3, column=0, sticky="nsew", padx=(14, 4), pady=(4, 4))
         self.rowconfigure(3, weight=1)
-        body.rowconfigure(0, weight=1)
+        body.rowconfigure(2, weight=1)
         body.columnconfigure(0, weight=1)
 
+        th = tk.Frame(body, bg=BLUE_SOFT)
+        th.grid(row=0, column=0, columnspan=2, sticky="ew")
+        tk.Label(th, text="TRASCRIZIONE LIVE", bg=BLUE_SOFT, fg=BLUE_D,
+                 font=("Segoe UI Semibold", 10)).pack(
+            side="left", padx=(14, 0), pady=8)
+        self.live_dot = tk.Label(th, text="\u25cf", bg=BLUE_SOFT,
+                                 fg="#cbd5e1", font=("Segoe UI", 9))
+        self.live_dot.pack(side="left", padx=(10, 4))
+        self.live_txt = tk.Label(th, text="pronta", bg=BLUE_SOFT, fg=MUTED,
+                                 font=FONT_SMALL)
+        self.live_txt.pack(side="left")
+        self.tr_count = tk.Label(th, textvariable=self.seg_var, bg=BLUE_SOFT,
+                                 fg=INK, font=FONT_MONO)
+        self.tr_count.pack(side="right", padx=(0, 14))
+        tk.Label(th, text="segmenti", bg=BLUE_SOFT, fg=MUTED,
+                 font=FONT_SMALL).pack(side="right", padx=(0, 4))
+        ttk.Separator(body, orient="horizontal").grid(
+            row=1, column=0, columnspan=2, sticky="ew")
+
         # --- sidebar: contesto attualmente salvato (evidenza) ---
-        ctx = tk.Frame(self, bg=CARD, highlightbackground=BORDER,
+        ctx = tk.Frame(self, bg=CARD, highlightbackground=BLUE_SOFT_D,
                        highlightthickness=1)
         ctx.grid(row=3, column=1, sticky="nsew", padx=(4, 14), pady=(4, 4))
         ctx.rowconfigure(1, weight=1)
@@ -770,8 +843,14 @@ class App(SafeDestroy, tk.Tk):
             insertbackground=BLUE, selectbackground="#bfdbfe")
         scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
         self.text.configure(yscrollcommand=scroll.set)
-        self.text.grid(row=0, column=0, sticky="nsew")
-        scroll.grid(row=0, column=1, sticky="ns")
+        self.text.grid(row=2, column=0, sticky="nsew")
+        scroll.grid(row=2, column=1, sticky="ns")
+        self.empty_lbl = tk.Label(
+            body, text="La trascrizione apparirà qui.\n"
+                       "Premi \u25b6 AVVIA REGISTRAZIONE per iniziare.",
+            bg="white", fg="#94a3b8", font=("Segoe UI", 11),
+            justify="center", padx=20, pady=20)
+        self.empty_lbl.place(relx=0.5, rely=0.55, anchor="center")
 
         self.text.tag_configure("ts", foreground=BLUE,
                                 font=("Segoe UI Semibold", 10))
@@ -780,6 +859,7 @@ class App(SafeDestroy, tk.Tk):
                                 font=("Segoe UI", 10))
         self.text.tag_configure("it", foreground=INK, lmargin1=18, lmargin2=18)
         self.text.tag_configure("err", foreground=RED)
+        self.text.tag_configure("warn", foreground=AMBER)
         self.text.tag_configure("sys", foreground=GREEN,
                                 font=("Segoe UI", 9, "italic"))
 
@@ -790,15 +870,15 @@ class App(SafeDestroy, tk.Tk):
         sb.columnconfigure(10, weight=1)
         tk.Label(sb, textvariable=self.status_var, bg="#e8edf3", fg="#334155",
                  font=FONT_SMALL).grid(row=0, column=0, sticky="w", padx=(12, 0))
-        tk.Label(sb, textvariable=self.timer_var, bg="#e8edf3", fg=AMBER,
-                 font=("Consolas", 9, "bold")).grid(
-            row=0, column=10, sticky="e", padx=(0, 14))
-        tk.Label(sb, textvariable=self.dur_var, bg="#e8edf3", fg=INK,
-                 font=FONT_MONO).grid(row=0, column=11, padx=(0, 14))
-        tk.Label(sb, textvariable=self.seg_var, bg="#e8edf3", fg=INK,
-                 font=FONT_MONO).grid(row=0, column=12, padx=(0, 14))
-        tk.Label(sb, textvariable=self.api_var, bg="#e8edf3", fg=INK,
-                 font=FONT_MONO).grid(row=0, column=13, padx=(0, 8))
+        metrics = tk.Frame(sb, bg="#e8edf3")
+        metrics.grid(row=0, column=10, sticky="e", padx=(8, 8))
+        self._chip(metrics, self.timer_var, AMBER, "timer").pack(
+            side="left", padx=3)
+        self._chip(metrics, self.dur_var, INK, "durata").pack(
+            side="left", padx=3)
+        self._chip(metrics, self.seg_var, INK, "segmenti").pack(
+            side="left", padx=3)
+        self._chip(metrics, self.api_var, INK).pack(side="left", padx=3)
         tk.Label(sb, text="livello", bg="#e8edf3", fg=MUTED,
                  font=("Segoe UI", 8)).grid(row=0, column=14, padx=(6, 2))
         self.level_bar = ttk.Progressbar(
@@ -830,18 +910,31 @@ class App(SafeDestroy, tk.Tk):
         """Mostra nella sidebar il contesto realmente salvato su disco."""
         notes = str(config.SETTINGS.get("context_notes", "")).strip()
         folder = str(config.SETTINGS.get("context_folder", "")).strip()
+        instructions = str(
+            config.SETTINGS.get("context_instructions", "")).strip()
+        rules = context_ai.parse_replacements(
+            str(config.SETTINGS.get("context_replacements", "")))
         self.ctx_text.configure(state="normal")
         self.ctx_text.delete("1.0", "end")
-        if notes:
-            self.ctx_text.insert("end", notes)
+        if notes or instructions or rules:
+            if notes:
+                self.ctx_text.insert("end", notes)
+            if instructions:
+                self.ctx_text.insert(
+                    "end", ("\n\n" if notes else "")
+                    + "Istruzioni IA:\n" + instructions)
+            if rules:
+                self.ctx_text.insert(
+                    "end", "\n\nCorrezioni esatte:\n"
+                    + "\n".join(f"{old} -> {new}" for old, new in rules))
         else:
             self.ctx_text.insert(
                 "end",
                 "Nessun contesto salvato.\n\n"
                 "Riassunto e Minute usano in questo momento solo la "
                 "trascrizione. Premi «Modifica…» per aggiungere note "
-                "(tema della call, partecipanti, riferimenti) o una "
-                "cartella di progetto.", ("ph",))
+                "(tema della call, partecipanti, riferimenti), istruzioni "
+                "o correzioni di nomi/termini.", ("ph",))
         self.ctx_text.configure(state="disabled")
         self.ctx_text.see("1.0")
         if folder:
@@ -860,6 +953,17 @@ class App(SafeDestroy, tk.Tk):
             return
         self._pill_cache = (text, bg)
         self.pill.configure(text=f" {text} ", bg=bg)
+
+    def _chip(self, parent: tk.Misc, var: tk.Variable, fg: str = INK,
+              prefix: str = "") -> tk.Frame:
+        box = tk.Frame(parent, bg="white", padx=7, pady=1,
+                       highlightbackground=BORDER, highlightthickness=1)
+        if prefix:
+            tk.Label(box, text=prefix, bg="white", fg=MUTED,
+                     font=("Segoe UI", 8)).pack(side="left", padx=(0, 5))
+        tk.Label(box, textvariable=var, bg="white", fg=fg,
+                 font=FONT_MONO).pack(side="left")
+        return box
 
     def _set_var(self, var: tk.Variable, value: str) -> None:
         """set solo al cambio: evita chiamate Tcl inutili nel poll a 10 Hz."""
@@ -919,6 +1023,63 @@ class App(SafeDestroy, tk.Tk):
                 "barra del livello si muove bene: con volume troppo basso "
                 "il parlato non viene riconosciuto e la trascrizione resta "
                 "vuota.\n\nLa registrazione continua.", parent=self))
+
+    _MIC_SILENT_S = 12.0
+
+    def _set_mic_warning(self, text: str | None, kind: str = "") -> None:
+        """Mostra/nasconde il banner rosso sul microfono."""
+        if not text:
+            if self._mic_warn_kind:
+                self.mic_warn_lbl.grid_remove()
+            self._mic_warn_kind = ""
+            return
+        if (kind == self._mic_warn_kind
+                and text == self.mic_warn_lbl.cget("text")):
+            return
+        self.mic_warn_lbl.configure(text=text)
+        self.mic_warn_lbl.grid()
+        self._mic_warn_kind = kind
+
+    def _watch_mic(self, now: float) -> None:
+        """Avvisa se il microfono scelto non produce audio ma il sistema sì."""
+        if self.audio is None:
+            return
+        if self.audio.mic_device is None:
+            self._set_mic_warning(
+                "Microfono disattivato: stai registrando solo l'audio di "
+                "sistema. Per includere la tua voce scegli un microfono "
+                "e riavvia la registrazione.", "off")
+            return
+        if self._mic_warn_kind == "off":
+            self._set_mic_warning(None)
+        level = self.audio.mic_level
+        if level is None:
+            return
+        if level > 0.004:
+            self._mic_silent_since = None
+            if self._mic_warn_kind == "silent":
+                self._set_mic_warning(None)
+            return
+        if self.audio.system_level < 0.01:
+            # nessuno sta parlando: non possiamo distinguere il muto
+            # dal semplice silenzio
+            self._mic_silent_since = None
+            return
+        if self._mic_silent_since is None:
+            self._mic_silent_since = now
+            return
+        if (self._mic_warned_silent
+                or now - self._mic_silent_since < self._MIC_SILENT_S):
+            return
+        self._mic_warned_silent = True
+        msg = ("Nessun audio dal microfono da 12 s mentre il sistema parla: "
+               "controlla di non essere mutato in Windows o con il tasto "
+               "fisico del microfono. La registrazione continua.")
+        self._set_mic_warning(msg, "silent")
+        self._sys_line(msg, tag="warn")
+        self.logger.warning("microfono silenzioso: livello=%.5f sistema=%.5f "
+                            "dispositivo=%s", level, self.audio.system_level,
+                            self._sess_devices)
 
     def _show_level(self, value: float) -> None:
         self.level_var.set(value)
@@ -1258,6 +1419,16 @@ class App(SafeDestroy, tk.Tk):
 
     def _update_controls(self) -> None:
         st = self.state_
+        if hasattr(self, "live_dot"):
+            if st == "running":
+                self.live_dot.configure(fg=GREEN)
+                self.live_txt.configure(text="in ascolto", fg=GREEN)
+            elif st == "stopping":
+                self.live_dot.configure(fg=AMBER)
+                self.live_txt.configure(text="chiusura", fg=AMBER)
+            else:
+                self.live_dot.configure(fg="#cbd5e1")
+                self.live_txt.configure(text="pronta", fg=MUTED)
         cfg_ok = st in ("idle", "stopped") and not self.generating
         state_cfg = "normal" if cfg_ok else "disabled"
         for w in (self.browse_btn, self.lb_combo, self.mic_combo,
@@ -1335,8 +1506,9 @@ class App(SafeDestroy, tk.Tk):
         if not path:
             return
         try:
-            tx = outputs.build_transcript_md(self.results,
-                                             self.final_duration)
+            tx = outputs.build_transcript_md(
+                self._correct_results(list(self.results)),
+                self.final_duration)
             saved = outputs.write_text(Path(path), tx)
         except Exception as exc:
             self.logger.exception("salvataggio trascrizione fallito")
@@ -1538,7 +1710,7 @@ class App(SafeDestroy, tk.Tk):
             self._sys_line("timer: nessuna registrazione da salvare",
                            tag="err")
             return False
-        results = list(self.results)
+        results = self._correct_results(list(self.results))
         duration = self.final_duration
         stamp = self.stamp
         has_tx = self._has_content()
@@ -1690,7 +1862,8 @@ class App(SafeDestroy, tk.Tk):
         try:
             outputs.write_text(
                 self.session_dir / "transcript_live.md",
-                outputs.build_transcript_md(pending, elapsed))
+                outputs.build_transcript_md(
+                    self._correct_results(pending), elapsed))
         except Exception:
             # warning (non debug): altrimenti la trascrizione live smette
             # di aggiornarsi senza che nessuno se ne accorga
@@ -1878,6 +2051,19 @@ class App(SafeDestroy, tk.Tk):
             messagebox.showerror("Avvio non riuscito", str(exc), parent=self)
             return
 
+        self._mic_silent_since = None
+        self._mic_warned_silent = False
+        if mic is None:
+            warn = ("Stai registrando con il microfono disattivato: verrà "
+                    "salvato solo l'audio di sistema.")
+            self._set_mic_warning(
+                "Microfono disattivato: stai registrando solo l'audio di "
+                "sistema. Per includere la tua voce scegli un microfono e "
+                "riavvia la registrazione.", "off")
+            self._sys_line(warn, tag="warn")
+        else:
+            self._set_mic_warning(None)
+
         if self.video_var.get():
             try:
                 self._start_screen_rec()
@@ -1923,6 +2109,7 @@ class App(SafeDestroy, tk.Tk):
     def _on_stop(self) -> None:
         if self.state_ != "running":
             return
+        self._set_mic_warning(None)
         # fermata a mano con timer / fine chiamata attivi: l'utente ha già
         # scelto il salvataggio automatico, quindi si salva comunque
         if not self._autostop_fired and (
@@ -2128,7 +2315,11 @@ class App(SafeDestroy, tk.Tk):
         dlg = ContextDialog(
             self,
             notes=str(config.SETTINGS.get("context_notes", "")),
-            folder=str(config.SETTINGS.get("context_folder", "")))
+            folder=str(config.SETTINGS.get("context_folder", "")),
+            instructions=str(
+                config.SETTINGS.get("context_instructions", "")),
+            replacements=str(
+                config.SETTINGS.get("context_replacements", "")))
         self._context_dlg = dlg
         self.wait_window(dlg)
         self._context_dlg = None
@@ -2136,13 +2327,20 @@ class App(SafeDestroy, tk.Tk):
             return
         config.SETTINGS["context_notes"] = dlg.result["notes"]
         config.SETTINGS["context_folder"] = dlg.result["folder"] or ""
+        config.SETTINGS["context_instructions"] = dlg.result["instructions"]
+        config.SETTINGS["context_replacements"] = dlg.result["replacements"]
         config.save_settings()
-        self.logger.info("contesto salvato: %d car, cartella=%s",
-                         len(dlg.result["notes"]), dlg.result["folder"])
-        extra = (f" · cartella: {dlg.result['folder']}"
+        rules = context_ai.parse_replacements(dlg.result["replacements"])
+        self.logger.info("contesto salvato: %d car, %d istruzioni, "
+                         "%d sostituzioni, cartella=%s",
+                         len(dlg.result["notes"]),
+                         len(dlg.result["instructions"]), len(rules),
+                         dlg.result["folder"])
+        extra = (f" - cartella: {dlg.result['folder']}"
                  if dlg.result["folder"] else "")
         self._sys_line(f"contesto salvato ({len(dlg.result['notes'])} "
-                       f"caratteri){extra} — usato da Riassunto e Minute")
+                       f"caratteri, {len(rules)} correzioni){extra} - "
+                       "usato da Riassunto e Minute")
         self._refresh_context_panel()
 
     def _build_context(self) -> str:
@@ -2151,19 +2349,29 @@ class App(SafeDestroy, tk.Tk):
         e prima bloccava l'interfaccia)."""
         notes = str(config.SETTINGS.get("context_notes", "")).strip()
         folder = str(config.SETTINGS.get("context_folder", "")).strip()
-        if not notes and not folder:
+        instructions = str(
+            config.SETTINGS.get("context_instructions", "")).strip()
+        composed = context_ai.compose_notes(notes, instructions)
+        if not composed and not folder:
             return context_ai.context_placeholder()
         if not folder:
-            return notes
+            return composed
         self.q.put(("status", "analisi del contesto…"))
         try:
-            text = context_ai.build_project_context(Path(folder), notes)
+            text = context_ai.build_project_context(Path(folder), composed)
             self.q.put(("sys", f"contesto progetto analizzato: {folder} "
                                f"({len(text)} caratteri)"))
             return text
         except Exception as exc:
             self.q.put(("sys", f"analisi contesto non riuscita: {exc}"))
-            return notes or context_ai.context_placeholder()
+            return composed or context_ai.context_placeholder()
+
+    @staticmethod
+    def _correct_results(results: list[dict]) -> list[dict]:
+        """Applica le sostituzioni esatte del contesto ai segmenti."""
+        rules = context_ai.parse_replacements(
+            str(config.SETTINGS.get("context_replacements", "")))
+        return context_ai.apply_replacements_to_results(results, rules)
 
     def _on_video_analysis(self) -> None:
         """Analisi visiva del video: frame -> descrizione (chiama l'AI)."""
@@ -2289,8 +2497,8 @@ class App(SafeDestroy, tk.Tk):
             visual = (f"\n\n{visual_text}" if visual_text else
                        "(nessuna analisi video per questa sessione)")
             system, user = self._doc_prompts(
-                kind, self.results, self.final_duration, context_text,
-                visual)
+                kind, self._correct_results(list(self.results)),
+                self.final_duration, context_text, visual)
             self.logger.info("generazione %s avviata", kind)
             text = service.complete(config.SETTINGS, system, user,
                                     on_status=self._q_status)
@@ -2371,6 +2579,7 @@ class App(SafeDestroy, tk.Tk):
                 self._tick_autostop(now)
                 if self.state_ == "running":
                     self._tick_callwatch(now)
+                    self._watch_mic(now)
             if self.state_ == "running":
                 # pallino «REC» lampeggiante e durata nel titolo (visibile
                 # anche dalla barra delle applicazioni a finestra ridotta)
@@ -2589,9 +2798,13 @@ class App(SafeDestroy, tk.Tk):
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
         self.text.configure(state="disabled")
+        if hasattr(self, "empty_lbl"):
+            self.empty_lbl.place(relx=0.5, rely=0.55, anchor="center")
 
     def _insert(self, content: str, tag: str | None = None,
                 stick: bool = True) -> None:
+        if hasattr(self, "empty_lbl"):
+            self.empty_lbl.place_forget()
         self.text.configure(state="normal")
         self.text.insert("end", content, tag)
         self.text.configure(state="disabled")
@@ -2605,6 +2818,8 @@ class App(SafeDestroy, tk.Tk):
     def _render_segment(self, r: dict) -> None:
         stick = self.text.yview()[1] >= 0.995
         ts = f"[{outputs.format_ts(r.get('start', 0))}] "
+        if hasattr(self, "empty_lbl"):
+            self.empty_lbl.place_forget()
         self.text.configure(state="normal")
         if r.get("error"):
             self.text.insert("end", ts, "ts")

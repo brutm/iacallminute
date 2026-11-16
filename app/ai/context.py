@@ -1,6 +1,7 @@
-"""Analisi opzionale di una cartella progetto per arricchire il contesto AI."""
+"""Contesto utente e correzioni per arricchire i prompt AI."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 MAX_CHARS = 12000
@@ -69,13 +70,78 @@ def _tree_lines(folder: Path) -> list[str]:
     return lines
 
 
+def compose_notes(notes: str = "", instructions: str = "") -> str:
+    """Unisce note libere e istruzioni/correzioni per l'IA."""
+    parts: list[str] = []
+    if notes.strip():
+        parts.append("NOTE DELL'UTENTE:\n" + notes.strip())
+    if instructions.strip():
+        parts.append("ISTRUZIONI PER L'IA (correzioni e chiarimenti forniti "
+                     "dall'utente):\n" + instructions.strip())
+    return "\n\n".join(parts)
+
+
+def parse_replacements(raw: str) -> list[tuple[str, str]]:
+    """Legge righe ``errato = corretto`` (o ``=>``, ``->``).
+
+    Le righe vuote e quelle che iniziano con ``#`` vengono ignorate.
+    """
+    rules: list[tuple[str, str]] = []
+    for line in str(raw or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        for sep in ("=>", "->", "="):
+            if sep in line:
+                old, new = line.split(sep, 1)
+                break
+        else:
+            continue
+        old, new = old.strip(), new.strip()
+        if old and old != new:
+            rules.append((old, new))
+    return rules
+
+
+def apply_replacements(text: str, rules: list[tuple[str, str]]) -> str:
+    """Applica le sostituzioni in modo case-insensitive, a parole intere
+    quando il termine inizia/finisce con un carattere alfanumerico."""
+    if not text or not rules:
+        return text
+    for old, new in rules:
+        pattern = re.escape(old)
+        if old[0].isalnum():
+            pattern = r"\b" + pattern
+        if old[-1].isalnum():
+            pattern += r"\b"
+        text = re.sub(pattern, lambda _m, n=new: n, text,
+                      flags=re.IGNORECASE)
+    return text
+
+
+def apply_replacements_to_results(
+        results: list[dict], rules: list[tuple[str, str]]) -> list[dict]:
+    """Copia i segmenti sostituendo i campi trascritti (italian/original)."""
+    if not rules:
+        return results
+    out: list[dict] = []
+    for item in results:
+        copy = dict(item)
+        for key in ("italian", "original"):
+            value = copy.get(key)
+            if isinstance(value, str):
+                copy[key] = apply_replacements(value, rules)
+        out.append(copy)
+    return out
+
+
 def build_project_context(folder: Path, extra_notes: str = "") -> str:
     """Restituisce un digest del progetto da iniettare nel prompt (≤ MAX_CHARS)."""
     folder = Path(folder)
     parts: list[str] = []
 
     if extra_notes.strip():
-        parts.append("NOTE DELL'UTENTE:\n" + extra_notes.strip())
+        parts.append(extra_notes.strip())
 
     if not folder.is_dir():
         parts.append(f"(cartella progetto non trovata: {folder})")
